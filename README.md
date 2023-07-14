@@ -68,3 +68,85 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+
+// Online IDE - Code Editor, Compiler, Interpreter
+
+@RequiredArgsConstructor
+@Sl4j
+@RestController
+@PostMappping("/icecreamorder")
+public ResponseEntity<Mono<String>> postIceCreamOrder(@RequestBody Order order) {
+    var result = iceCreamService.processOrder(order)
+    return ResponseEntity.ok(result)
+}
+
+public class iceCreamService {
+    /*
+    various reposiory implementations
+    */
+    @Transactional
+    public Mono<String> processOrder(Order order) {
+        Flux<OrderTuple> tupleToShare = saveOrder(order)
+        .flatMap(orderId -> saveMasterOrder(order))
+        .map(parentOrder -> new MasterOrderTuple(orderId, parentOrder.getT1, parentOrder.getT2))
+        .share()
+    }
+    
+    Mono<Long> toppingMono = tupleToShare.flatMap....insertToppings....count()
+    
+    Mono<Long> conesMono = tupleToShare.flatMap......insertConeDetails.....count()
+    
+    Mono<Long> flavorsMono = tupleToShare.flatMap.....insertFlavorDetails......count()
+    
+    return Mono.zip(toppingMono,
+                conesMono,
+                flavorsMono)
+                .then(Mono.just("Order process complete"))
+                
+    Flux<String> saveMasterOrder(Order order) {
+        saveMasterOrderImpl.insertOrder(order)
+        return ...
+    }
+    
+}
+
+@SpringBootTest(webEnvironment = SpringBootTest.webEnvironment.RANDOM_PORT)
+@ActiveProfile("Test")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class IceCreamOrderTest {
+    @Autowired
+    private WebTestClient webTestClient;
+    @Autowired
+    private DatabaseClient databaseClient;
+    
+    @BeforeAll
+    public void setUp() {
+        var jsonObj = new ClassPathResource("icecreamorder.json");
+        webTestClient.post()
+            .uri("/icecreamorder")
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(BodyInserters.fromResource(jsonObj))
+            .exchange()
+            .expectStatus().isOk();
+    }
+    
+    // This test fails beause it finds 3 as the Mono.zip(with 3 Monos) above does not execute 
+    // in paralell but sequentially. this causes the processOrder flux to run 3 times instead
+    // just once and it share its results. 
+    @Test
+    void testMasterOrderTable() {
+        String sql = """
+            select * 
+            from master_order_table
+            """;
+        databaseClient.sql(sql)
+            .fetch()
+            .all()
+            .as(StepVerifier::create)
+            .expectNextCount(1)
+            .verifyComplete();
+    }
+}
+
+
